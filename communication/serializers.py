@@ -1,5 +1,6 @@
 from rest_framework import serializers
 from .models import Announcement, Notification
+from .models import ContactMessage
 from users.serializers import UserSerializer
 
 
@@ -22,6 +23,16 @@ class AnnouncementSerializer(serializers.ModelSerializer):
             "end_date",
         ]
         read_only_fields = ["id"]
+
+# -------------------------------------
+# Messages
+# -------------------------------------
+
+
+class ContactMessageSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ContactMessage
+        fields = "__all__"
 
 
 # -------------------------------------

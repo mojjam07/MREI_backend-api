@@ -15,8 +15,24 @@ Including another URLconf
     2. Add a URL to urlpatterns:  path('blog/', include('blog.urls'))
 """
 from django.contrib import admin
-from django.urls import path
+from django.urls import path, include
+from django.http import JsonResponse
+from django.conf import settings
+from django.conf.urls.static import static
+from rest_framework.decorators import api_view, permission_classes
+from rest_framework.permissions import AllowAny
+
+@api_view(['GET'])
+@permission_classes([AllowAny])
+def home(request):
+    return JsonResponse({
+        "message": "Welcome to the platform",
+        "status": "OK"
+    })
+
 
 urlpatterns = [
+    path('', home),
     path('admin/', admin.site.urls),
-]
+    path('api/', include('config.urls')),
+] + static(settings.STATIC_URL, document_root=settings.STATIC_ROOT)

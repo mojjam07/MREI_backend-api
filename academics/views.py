@@ -13,6 +13,7 @@ class CourseViewSet(viewsets.ModelViewSet):
 
 
 class EnrollmentViewSet(viewsets.ModelViewSet):
+    queryset = Enrollment.objects.all()
     serializer_class = EnrollmentSerializer
     permission_classes = [permissions.IsAuthenticated]
 

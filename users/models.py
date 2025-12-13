@@ -25,7 +25,6 @@ class CustomUser(AbstractUser):
     ROLE_CHOICES = [
         ("student", "Student"),
         ("tutor", "Tutor"),
-        ("staff", "Staff"),
         ("alumni", "Alumni"),
         ("admin", "Admin"),
     ]
@@ -70,10 +69,10 @@ class TutorProfile(models.Model):
 
 
 # -------------------------------------
-# Staff Profile
+# Admin Profile
 # -------------------------------------
-class StaffProfile(models.Model):
-    user = models.OneToOneField(CustomUser, on_delete=models.CASCADE, related_name="staff_profile")
+class AdminProfile(models.Model):
+    user = models.OneToOneField(CustomUser, on_delete=models.CASCADE, related_name="admin_profile")
     role_title = models.CharField(max_length=255)
     department = models.CharField(max_length=255)
 

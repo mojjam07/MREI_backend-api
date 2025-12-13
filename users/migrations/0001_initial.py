@@ -56,12 +56,12 @@ class Migration(migrations.Migration):
             ],
         ),
         migrations.CreateModel(
-            name='StaffProfile',
+            name='AdminProfile',
             fields=[
                 ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
                 ('role_title', models.CharField(max_length=255)),
                 ('department', models.CharField(max_length=255)),
-                ('user', models.OneToOneField(on_delete=django.db.models.deletion.CASCADE, related_name='staff_profile', to='users.customuser')),
+                ('user', models.OneToOneField(on_delete=django.db.models.deletion.CASCADE, related_name='admin_profile', to='users.customuser')),
             ],
         ),
         migrations.CreateModel(

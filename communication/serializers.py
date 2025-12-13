@@ -1,28 +1,6 @@
 from rest_framework import serializers
-from .models import Announcement, Notification
-from .models import ContactMessage
+from .models import ContactMessage, Testimonial, Statistics, News, Event, CampusLife
 from users.serializers import UserSerializer
-
-
-# -------------------------------------
-# Announcement Serializer
-# -------------------------------------
-class AnnouncementSerializer(serializers.ModelSerializer):
-    """
-    Serializer for the Announcement model.
-    """
-
-    class Meta:
-        model = Announcement
-        fields = [
-            "id",
-            "title",
-            "content",
-            "visible_to",
-            "start_date",
-            "end_date",
-        ]
-        read_only_fields = ["id"]
 
 # -------------------------------------
 # Messages
@@ -34,26 +12,47 @@ class ContactMessageSerializer(serializers.ModelSerializer):
         model = ContactMessage
         fields = "__all__"
 
+# --------------------------------------
+# Testimonials
+# --------------------------------------
 
-# -------------------------------------
-# Notification Serializer
-# -------------------------------------
-class NotificationSerializer(serializers.ModelSerializer):
-    """
-    Serializer for the Notification model.
-    """
-
-    user = UserSerializer(read_only=True)
-
+class TestimonialSerializer(serializers.ModelSerializer):
     class Meta:
-        model = Notification
-        fields = [
-            "id",
-            "user",
-            "title",
-            "message",
-            "type",
-            "read",
-            "created_at",
-        ]
-        read_only_fields = ["id", "user", "created_at"]
+        model = Testimonial
+        fields = "__all__"
+
+# --------------------------------------
+# Statistics
+# --------------------------------------
+
+class StatisticSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Statistics
+        fields = '__all__'
+
+# --------------------------------------
+# News
+# --------------------------------------
+
+class NewsSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = News
+        fields = '__all__'
+
+# --------------------------------------
+# Event
+# --------------------------------------
+
+class EventSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Event
+        fields = '__all__'
+
+# --------------------------------------
+# CampusLife
+# --------------------------------------
+
+class CampusLifeSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = CampusLife
+        field = '__all__'

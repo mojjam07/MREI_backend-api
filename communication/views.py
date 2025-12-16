@@ -1,886 +1,591 @@
 # views.py
-from rest_framework import viewsets, status, filters
-from rest_framework.decorators import action, api_view, permission_classes
+
+from rest_framework import viewsets, status
+from rest_framework.decorators import api_view, permission_classes
+from rest_framework.permissions import AllowAny, IsAuthenticated, IsAdminUser
 from rest_framework.response import Response
-from rest_framework.permissions import IsAuthenticated, IsAdminUser, AllowAny
-from django.shortcuts import get_object_or_404
-from django_filters.rest_framework import DjangoFilterBackend
-from .models import Statistics, News, Event, Testimonial, CampusLife, ContactMessage
-from .serializers import StatisticSerializer, NewsSerializer, EventSerializer, TestimonialSerializer, TestimonialSerializer, CampusLifeSerializer, ContactMessageSerializer
+from django.db.models import Q
+from django.contrib.auth import get_user_model
+from django.utils import timezone
+from .models import Statistics, News, Event, Testimonial, CampusLife, ContactMessage, Message, Notification, Announcement, Book
+from academics.models import Course, Assignment, ClassSchedule, Enrollment
+from .serializers import (
+    StatisticsSerializer, NewsSerializer, EventSerializer, TestimonialSerializer,
+    CampusLifeSerializer, ContactMessageSerializer, MessageSerializer,
+    NotificationSerializer, AnnouncementSerializer, BookSerializer
+)
 
+User = get_user_model()
 
-# ============================================================================
-# STATISTICS VIEWSET
-# ============================================================================
+# -------------------------------------
+# ViewSets
+# -------------------------------------
+
 class StatisticsViewSet(viewsets.ModelViewSet):
     """
-    ViewSet for managing site statistics.
-    
-    Permissions:
-    - GET (list, retrieve): Public access
-    - POST, PUT, PATCH, DELETE: Admin only
-    
-    Endpoints:
-    - GET /api/statistics/ - List all statistics
-    - GET /api/statistics/{id}/ - Get specific statistics
-    - GET /api/statistics/latest/ - Get latest statistics (custom action)
-    - POST /api/statistics/ - Create statistics (admin)
-    - PUT/PATCH /api/statistics/{id}/ - Update statistics (admin)
-    - DELETE /api/statistics/{id}/ - Delete statistics (admin)
+    ViewSet for managing statistics
     """
     queryset = Statistics.objects.all()
-    serializer_class = StatisticSerializer
+    serializer_class = StatisticsSerializer
+    permission_classes = [IsAuthenticated]
     
     def get_permissions(self):
         """
-        Public can view, only admins can modify
+        Set permissions based on action
         """
-        if self.action in ['list', 'retrieve', 'latest']:
-            return [AllowAny()]
-        return [IsAdminUser()]
-    
-    def list(self, request, *args, **kwargs):
-        """
-        List all statistics records
-        """
-        queryset = self.get_queryset()
-        serializer = self.get_serializer(queryset, many=True)
-        return Response(serializer.data)
-    
-    def retrieve(self, request, *args, **kwargs):
-        """
-        Get a specific statistics record
-        """
-        instance = self.get_object()
-        serializer = self.get_serializer(instance)
-        return Response(serializer.data)
-    
-    def create(self, request, *args, **kwargs):
-        """
-        Create new statistics record (admin only)
-        """
-        serializer = self.get_serializer(data=request.data)
-        if serializer.is_valid():
-            serializer.save()
-            return Response(serializer.data, status=status.HTTP_201_CREATED)
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-    
-    def update(self, request, *args, **kwargs):
-        """
-        Update statistics record (admin only)
-        """
-        partial = kwargs.pop('partial', False)
-        instance = self.get_object()
-        serializer = self.get_serializer(instance, data=request.data, partial=partial)
-        if serializer.is_valid():
-            serializer.save()
-            return Response(serializer.data)
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-    
-    def partial_update(self, request, *args, **kwargs):
-        """
-        Partially update statistics record (admin only)
-        """
-        kwargs['partial'] = True
-        return self.update(request, *args, **kwargs)
-    
-    def destroy(self, request, *args, **kwargs):
-        """
-        Delete statistics record (admin only)
-        """
-        instance = self.get_object()
-        instance.delete()
-        return Response(status=status.HTTP_204_NO_CONTENT)
-    
-    @action(detail=False, methods=['get'], permission_classes=[AllowAny])
-    def latest(self, request):
-        """
-        Get the latest/most recent statistics record
-        
-        GET /api/statistics/latest/
-        """
-        stats = self.queryset.first()
-        if stats:
-            serializer = self.get_serializer(stats)
-            return Response(serializer.data)
-        return Response({
-            'active_students': 0,
-            'courses': 0,
-            'success_rate': 0,
-            'tutors': 0
-        })
+        if self.action == 'list':
+            permission_classes = [AllowAny]
+        else:
+            permission_classes = [IsAdminUser]
+        return [permission() for permission in permission_classes]
 
 
-# ============================================================================
-# NEWS VIEWSET
-# ============================================================================
 class NewsViewSet(viewsets.ModelViewSet):
     """
-    ViewSet for managing news articles.
-    
-    Permissions:
-    - GET (list, retrieve): Public access (published only)
-    - POST, PUT, PATCH, DELETE: Admin only
-    
-    Endpoints:
-    - GET /api/news/ - List published news
-    - GET /api/news/?published=true/false - Filter by published status
-    - GET /api/news/{id}/ - Get specific news article
-    - POST /api/news/ - Create news article (admin)
-    - PUT/PATCH /api/news/{id}/ - Update news article (admin)
-    - DELETE /api/news/{id}/ - Delete news article (admin)
+    ViewSet for managing news articles
     """
     queryset = News.objects.all()
     serializer_class = NewsSerializer
-    filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
-    filterset_fields = ['published']
-    search_fields = ['title', 'content']
-    ordering_fields = ['created_at', 'updated_at']
-    ordering = ['-created_at']
-    
-    def get_permissions(self):
-        """
-        Public can view published news, only admins can modify
-        """
-        if self.action in ['list', 'retrieve']:
-            return [AllowAny()]
-        return [IsAdminUser()]
+    permission_classes = [IsAuthenticated]
     
     def get_queryset(self):
         """
-        Filter queryset based on user permissions
-        - Admin: sees all news
-        - Public: sees only published news
+        Return only published news for non-admin users
         """
-        queryset = self.queryset
-        if not self.request.user.is_staff:
-            queryset = queryset.filter(published=True)
-        return queryset
-    
-    def list(self, request, *args, **kwargs):
-        """
-        List news articles
-        """
-        queryset = self.filter_queryset(self.get_queryset())
-        page = self.paginate_queryset(queryset)
-        if page is not None:
-            serializer = self.get_serializer(page, many=True)
-            return self.get_paginated_response(serializer.data)
-        
-        serializer = self.get_serializer(queryset, many=True)
-        return Response(serializer.data)
-    
-    def retrieve(self, request, *args, **kwargs):
-        """
-        Get a specific news article
-        """
-        instance = self.get_object()
-        serializer = self.get_serializer(instance)
-        return Response(serializer.data)
-    
-    def create(self, request, *args, **kwargs):
-        """
-        Create a new news article (admin only)
-        Automatically sets the author to the current user
-        """
-        serializer = self.get_serializer(data=request.data)
-        if serializer.is_valid():
-            serializer.save(author=request.user)
-            return Response(serializer.data, status=status.HTTP_201_CREATED)
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-    
-    def update(self, request, *args, **kwargs):
-        """
-        Update a news article (admin only)
-        """
-        partial = kwargs.pop('partial', False)
-        instance = self.get_object()
-        serializer = self.get_serializer(instance, data=request.data, partial=partial)
-        if serializer.is_valid():
-            serializer.save()
-            return Response(serializer.data)
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-    
-    def partial_update(self, request, *args, **kwargs):
-        """
-        Partially update a news article (admin only)
-        """
-        kwargs['partial'] = True
-        return self.update(request, *args, **kwargs)
-    
-    def destroy(self, request, *args, **kwargs):
-        """
-        Delete a news article (admin only)
-        """
-        instance = self.get_object()
-        instance.delete()
-        return Response({
-            'success': True,
-            'message': 'News article deleted successfully'
-        }, status=status.HTTP_204_NO_CONTENT)
-
-
-# ============================================================================
-# EVENT VIEWSET
-# ============================================================================
-class EventViewSet(viewsets.ModelViewSet):
-    """
-    ViewSet for managing campus events.
-    
-    Permissions:
-    - GET (list, retrieve): Public access (published only)
-    - POST, PUT, PATCH, DELETE: Admin only
-    
-    Endpoints:
-    - GET /api/events/ - List published events
-    - GET /api/events/?published=true/false - Filter by published status
-    - GET /api/events/{id}/ - Get specific event
-    - POST /api/events/ - Create event (admin)
-    - PUT/PATCH /api/events/{id}/ - Update event (admin)
-    - DELETE /api/events/{id}/ - Delete event (admin)
-    """
-    queryset = Event.objects.all()
-    serializer_class = EventSerializer
-    filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
-    filterset_fields = ['published']
-    search_fields = ['title', 'content', 'location']
-    ordering_fields = ['event_date', 'created_at']
-    ordering = ['-event_date', '-created_at']
-    
-    def get_permissions(self):
-        """
-        Public can view published events, only admins can modify
-        """
-        if self.action in ['list', 'retrieve']:
-            return [AllowAny()]
-        return [IsAdminUser()]
-    
-    def get_queryset(self):
-        """
-        Filter queryset based on user permissions
-        - Admin: sees all events
-        - Public: sees only published events
-        """
-        queryset = self.queryset
-        if self.request.user.role != 'admin':
-            queryset = queryset.filter(published=True)
-        return queryset
-    
-    def list(self, request, *args, **kwargs):
-        """
-        List events
-        """
-        queryset = self.filter_queryset(self.get_queryset())
-        page = self.paginate_queryset(queryset)
-        if page is not None:
-            serializer = self.get_serializer(page, many=True)
-            return self.get_paginated_response(serializer.data)
-        
-        serializer = self.get_serializer(queryset, many=True)
-        return Response(serializer.data)
-    
-    def retrieve(self, request, *args, **kwargs):
-        """
-        Get a specific event
-        """
-        instance = self.get_object()
-        serializer = self.get_serializer(instance)
-        return Response(serializer.data)
-    
-    def create(self, request, *args, **kwargs):
-        """
-        Create a new event (admin only)
-        """
-        serializer = self.get_serializer(data=request.data)
-        if serializer.is_valid():
-            serializer.save()
-            return Response(serializer.data, status=status.HTTP_201_CREATED)
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-    
-    def update(self, request, *args, **kwargs):
-        """
-        Update an event (admin only)
-        """
-        partial = kwargs.pop('partial', False)
-        instance = self.get_object()
-        serializer = self.get_serializer(instance, data=request.data, partial=partial)
-        if serializer.is_valid():
-            serializer.save()
-            return Response(serializer.data)
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-    
-    def partial_update(self, request, *args, **kwargs):
-        """
-        Partially update an event (admin only)
-        """
-        kwargs['partial'] = True
-        return self.update(request, *args, **kwargs)
-    
-    def destroy(self, request, *args, **kwargs):
-        """
-        Delete an event (admin only)
-        """
-        instance = self.get_object()
-        instance.delete()
-        return Response({
-            'success': True,
-            'message': 'Event deleted successfully'
-        }, status=status.HTTP_204_NO_CONTENT)
-
-
-# ============================================================================
-# TESTIMONIAL VIEWSET
-# ============================================================================
-class TestimonialViewSet(viewsets.ModelViewSet):
-    """
-    ViewSet for managing testimonials.
-    
-    Permissions:
-    - GET (list, retrieve): Public access (approved only)
-    - POST: Admin only (for admin-created testimonials)
-    - POST /submit/: Public access (for user submissions)
-    - PUT, PATCH, DELETE: Admin only
-    
-    Endpoints:
-    - GET /api/testimonials/ - List approved testimonials
-    - GET /api/testimonials/?approved=true/false - Filter by approval
-    - GET /api/testimonials/{id}/ - Get specific testimonial
-    - POST /api/testimonials/ - Create testimonial (admin)
-    - POST /api/testimonials/submit/ - Submit testimonial (public)
-    - PUT/PATCH /api/testimonials/{id}/ - Update testimonial (admin)
-    - DELETE /api/testimonials/{id}/ - Delete testimonial (admin)
-    - POST /api/testimonials/{id}/approve/ - Approve testimonial (admin)
-    - POST /api/testimonials/{id}/unapprove/ - Unapprove testimonial (admin)
-    - PATCH /api/testimonials/{id}/toggle_approval/ - Toggle approval (admin)
-    """
-    queryset = Testimonial.objects.all()
-    serializer_class = TestimonialSerializer
-    filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
-    filterset_fields = ['approved']
-    search_fields = ['author', 'author_title', 'content']
-    ordering_fields = ['created_at']
-    ordering = ['-created_at']
+        if self.request.user.is_staff or self.request.user.is_superuser:
+            return News.objects.all()
+        return News.objects.filter(published=True)
     
     def get_permissions(self):
         """
         Set permissions based on action
         """
         if self.action in ['list', 'retrieve']:
-            return [AllowAny()]
-        elif self.action == 'submit':
-            return [AllowAny()]
-        return [IsAdminUser()]
+            permission_classes = [AllowAny]
+        else:
+            permission_classes = [IsAdminUser]
+        return [permission() for permission in permission_classes]
+
+
+class EventViewSet(viewsets.ModelViewSet):
+    """
+    ViewSet for managing events
+    """
+    queryset = Event.objects.all()
+    serializer_class = EventSerializer
+    permission_classes = [IsAuthenticated]
     
     def get_queryset(self):
         """
-        Filter queryset based on user permissions
-        - Admin: sees all testimonials
-        - Public: sees only approved testimonials
+        Return only published events for non-admin users
         """
-        queryset = self.queryset
-        
-        # Non-admin users only see approved testimonials
-        if not self.request.user.is_staff:
-            queryset = queryset.filter(approved=True)
-        
-        return queryset
+        if self.request.user.is_staff or self.request.user.is_superuser:
+            return Event.objects.all()
+        return Event.objects.filter(published=True)
     
-    def list(self, request, *args, **kwargs):
+    def get_permissions(self):
         """
-        List testimonials
+        Set permissions based on action
         """
-        queryset = self.filter_queryset(self.get_queryset())
-        page = self.paginate_queryset(queryset)
-        if page is not None:
-            serializer = self.get_serializer(page, many=True)
-            return self.get_paginated_response(serializer.data)
-        
-        serializer = self.get_serializer(queryset, many=True)
-        return Response(serializer.data)
-    
-    def retrieve(self, request, *args, **kwargs):
-        """
-        Get a specific testimonial
-        """
-        instance = self.get_object()
-        serializer = self.get_serializer(instance)
-        return Response(serializer.data)
-    
-    def create(self, request, *args, **kwargs):
-        """
-        Create a new testimonial (admin only)
-        Admin-created testimonials are automatically approved
-        """
-        serializer = self.get_serializer(data=request.data)
-        if serializer.is_valid():
-            # Admin-created testimonials default to approved
-            serializer.save(
-                submitted_by=request.user,
-                approved=request.data.get('approved', True)
-            )
-            return Response(serializer.data, status=status.HTTP_201_CREATED)
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-    
-    def update(self, request, *args, **kwargs):
-        """
-        Update a testimonial (admin only)
-        """
-        partial = kwargs.pop('partial', False)
-        instance = self.get_object()
-        serializer = self.get_serializer(instance, data=request.data, partial=partial)
-        if serializer.is_valid():
-            serializer.save()
-            return Response(serializer.data)
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-    
-    def partial_update(self, request, *args, **kwargs):
-        """
-        Partially update a testimonial (admin only)
-        """
-        kwargs['partial'] = True
-        return self.update(request, *args, **kwargs)
-    
-    def destroy(self, request, *args, **kwargs):
-        """
-        Delete a testimonial (admin only)
-        """
-        instance = self.get_object()
-        instance.delete()
-        return Response({
-            'success': True,
-            'message': 'Testimonial deleted successfully'
-        }, status=status.HTTP_204_NO_CONTENT)
-    
-    @action(detail=False, methods=['post'], permission_classes=[AllowAny])
-    def submit(self, request):
-        """
-        Public endpoint for submitting testimonials
-        Testimonials submitted through this endpoint start as unapproved
-        
-        POST /api/testimonials/submit/
-        
-        Request body:
-        {
-            "content": "Testimonial text",
-            "author": "John Doe",
-            "author_title": "Computer Science Graduate",
-            "email": "john@example.com",
-            "image_url": "https://example.com/image.jpg"
-        }
-        """
-        serializer = TestimonialSubmitSerializer(data=request.data)
-        if serializer.is_valid():
-            testimonial = serializer.save()
-            return Response({
-                'success': True,
-                'message': 'Thank you! Your testimonial has been submitted and is pending approval.',
-                'id': testimonial.id
-            }, status=status.HTTP_201_CREATED)
-        return Response({
-            'success': False,
-            'errors': serializer.errors
-        }, status=status.HTTP_400_BAD_REQUEST)
-    
-    @action(detail=True, methods=['post'], permission_classes=[IsAdminUser])
-    def approve(self, request, pk=None):
-        """
-        Approve a testimonial
-        
-        POST /api/testimonials/{id}/approve/
-        """
-        testimonial = self.get_object()
-        testimonial.approved = True
-        testimonial.save()
-        serializer = self.get_serializer(testimonial)
-        return Response({
-            'success': True,
-            'message': 'Testimonial approved successfully',
-            'data': serializer.data
-        })
-    
-    @action(detail=True, methods=['post'], permission_classes=[IsAdminUser])
-    def unapprove(self, request, pk=None):
-        """
-        Unapprove a testimonial
-        
-        POST /api/testimonials/{id}/unapprove/
-        """
-        testimonial = self.get_object()
-        testimonial.approved = False
-        testimonial.save()
-        serializer = self.get_serializer(testimonial)
-        return Response({
-            'success': True,
-            'message': 'Testimonial unapproved successfully',
-            'data': serializer.data
-        })
-    
-    @action(detail=True, methods=['patch'], permission_classes=[IsAdminUser])
-    def toggle_approval(self, request, pk=None):
-        """
-        Toggle testimonial approval status
-        
-        PATCH /api/testimonials/{id}/toggle_approval/
-        """
-        testimonial = self.get_object()
-        testimonial.approved = not testimonial.approved
-        testimonial.save()
-        serializer = self.get_serializer(testimonial)
-        return Response({
-            'success': True,
-            'message': f'Testimonial {"approved" if testimonial.approved else "unapproved"} successfully',
-            'data': serializer.data
-        })
+        if self.action in ['list', 'retrieve']:
+            permission_classes = [AllowAny]
+        else:
+            permission_classes = [IsAdminUser]
+        return [permission() for permission in permission_classes]
 
 
-# ============================================================================
-# CAMPUS LIFE VIEWSET
-# ============================================================================
+class TestimonialViewSet(viewsets.ModelViewSet):
+    """
+    ViewSet for managing testimonials
+    """
+    queryset = Testimonial.objects.all()
+    serializer_class = TestimonialSerializer
+    permission_classes = [IsAuthenticated]
+    
+    def get_queryset(self):
+        """
+        Return only approved testimonials for non-admin users
+        """
+        if self.request.user.is_staff or self.request.user.is_superuser:
+            return Testimonial.objects.all()
+        return Testimonial.objects.filter(approved=True)
+    
+    def get_permissions(self):
+        """
+        Set permissions based on action
+        """
+        if self.action in ['list', 'retrieve']:
+            permission_classes = [AllowAny]
+        else:
+            permission_classes = [IsAdminUser]
+        return [permission() for permission in permission_classes]
+
+
 class CampusLifeViewSet(viewsets.ModelViewSet):
     """
-    ViewSet for managing campus life gallery images.
-    
-    Permissions:
-    - GET (list, retrieve): Public access (published only)
-    - POST, PUT, PATCH, DELETE: Admin only
-    
-    Endpoints:
-    - GET /api/campus-life/ - List published images
-    - GET /api/campus-life/?published=true/false - Filter by published status
-    - GET /api/campus-life/{id}/ - Get specific image
-    - POST /api/campus-life/ - Upload image (admin)
-    - PUT/PATCH /api/campus-life/{id}/ - Update image (admin)
-    - DELETE /api/campus-life/{id}/ - Delete image (admin)
+    ViewSet for managing campus life images
     """
     queryset = CampusLife.objects.all()
     serializer_class = CampusLifeSerializer
-    filter_backends = [DjangoFilterBackend, filters.OrderingFilter]
-    filterset_fields = ['published']
-    ordering_fields = ['created_at']
-    ordering = ['-created_at']
-    
-    def get_permissions(self):
-        """
-        Public can view published images, only admins can modify
-        """
-        if self.action in ['list', 'retrieve']:
-            return [AllowAny()]
-        return [IsAdminUser()]
+    permission_classes = [IsAuthenticated]
     
     def get_queryset(self):
         """
-        Filter queryset based on user permissions
-        - Admin: sees all images
-        - Public: sees only published images
+        Return only published images for non-admin users
         """
-        queryset = self.queryset
-        if self.request.user.role != 'admin':
-            queryset = queryset.filter(published=True)
-        return queryset
-    
-    def list(self, request, *args, **kwargs):
-        """
-        List campus life images
-        """
-        queryset = self.filter_queryset(self.get_queryset())
-        page = self.paginate_queryset(queryset)
-        if page is not None:
-            serializer = self.get_serializer(page, many=True)
-            return self.get_paginated_response(serializer.data)
-        
-        serializer = self.get_serializer(queryset, many=True)
-        return Response(serializer.data)
-    
-    def retrieve(self, request, *args, **kwargs):
-        """
-        Get a specific campus life image
-        """
-        instance = self.get_object()
-        serializer = self.get_serializer(instance)
-        return Response(serializer.data)
-    
-    def create(self, request, *args, **kwargs):
-        """
-        Upload a new campus life image (admin only)
-        Automatically sets uploaded_by to current user
-        """
-        serializer = self.get_serializer(data=request.data)
-        if serializer.is_valid():
-            serializer.save(uploaded_by=request.user)
-            return Response(serializer.data, status=status.HTTP_201_CREATED)
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-    
-    def update(self, request, *args, **kwargs):
-        """
-        Update a campus life image (admin only)
-        """
-        partial = kwargs.pop('partial', False)
-        instance = self.get_object()
-        serializer = self.get_serializer(instance, data=request.data, partial=partial)
-        if serializer.is_valid():
-            serializer.save()
-            return Response(serializer.data)
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-    
-    def partial_update(self, request, *args, **kwargs):
-        """
-        Partially update a campus life image (admin only)
-        """
-        kwargs['partial'] = True
-        return self.update(request, *args, **kwargs)
-    
-    def destroy(self, request, *args, **kwargs):
-        """
-        Delete a campus life image (admin only)
-        """
-        instance = self.get_object()
-        instance.delete()
-        return Response({
-            'success': True,
-            'message': 'Campus life image deleted successfully'
-        }, status=status.HTTP_204_NO_CONTENT)
-
-
-# ============================================================================
-# CONTACT MESSAGE VIEWSET
-# ============================================================================
-class ContactMessageViewSet(viewsets.ModelViewSet):
-    """
-    ViewSet for managing contact form submissions.
-    
-    Permissions:
-    - POST: Public access (anyone can submit)
-    - GET, PUT, PATCH, DELETE: Admin only
-    
-    Endpoints:
-    - GET /api/contact/ - List all messages (admin)
-    - GET /api/contact/?read=true/false - Filter by read status
-    - GET /api/contact/{id}/ - Get specific message (admin)
-    - POST /api/contact/ - Submit contact form (public)
-    - PUT/PATCH /api/contact/{id}/ - Update message (admin)
-    - DELETE /api/contact/{id}/ - Delete message (admin)
-    - POST /api/contact/{id}/mark_read/ - Mark as read (admin)
-    - POST /api/contact/{id}/mark_replied/ - Mark as replied (admin)
-    """
-    queryset = ContactMessage.objects.all()
-    serializer_class = ContactMessageSerializer
-    filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
-    filterset_fields = ['read', 'replied']
-    search_fields = ['name', 'email', 'subject', 'message']
-    ordering_fields = ['created_at']
-    ordering = ['-created_at']
+        if self.request.user.is_staff or self.request.user.is_superuser:
+            return CampusLife.objects.all()
+        return CampusLife.objects.filter(published=True)
     
     def get_permissions(self):
         """
-        Public can create, only admins can view and manage
+        Set permissions based on action
         """
-        if self.action == 'create':
-            return [AllowAny()]
-        return [IsAdminUser()]
-    
-    def get_serializer_class(self):
-        """
-        Use different serializer for creation
-        """
-        if self.action == 'create':
-            return ContactMessageCreateSerializer
-        return ContactMessageSerializer
-    
-    def list(self, request, *args, **kwargs):
-        """
-        List all contact messages (admin only)
-        """
-        queryset = self.filter_queryset(self.get_queryset())
-        page = self.paginate_queryset(queryset)
-        if page is not None:
-            serializer = self.get_serializer(page, many=True)
-            return self.get_paginated_response(serializer.data)
-        
-        serializer = self.get_serializer(queryset, many=True)
-        return Response(serializer.data)
-    
-    def retrieve(self, request, *args, **kwargs):
-        """
-        Get a specific contact message (admin only)
-        """
-        instance = self.get_object()
-        serializer = self.get_serializer(instance)
-        return Response(serializer.data)
-    
-    def create(self, request, *args, **kwargs):
-        """
-        Submit a contact form message (public)
-        
-        POST /api/contact/
-        
-        Request body:
-        {
-            "name": "John Doe",
-            "email": "john@example.com",
-            "subject": "Inquiry",
-            "message": "Message content"
-        }
-        """
-        serializer = self.get_serializer(data=request.data)
-        if serializer.is_valid():
-            serializer.save()
-            return Response({
-                'success': True,
-                'message': 'Your message has been sent successfully. We will get back to you soon!'
-            }, status=status.HTTP_201_CREATED)
-        return Response({
-            'success': False,
-            'errors': serializer.errors
-        }, status=status.HTTP_400_BAD_REQUEST)
-    
-    def update(self, request, *args, **kwargs):
-        """
-        Update a contact message (admin only)
-        """
-        partial = kwargs.pop('partial', False)
-        instance = self.get_object()
-        serializer = self.get_serializer(instance, data=request.data, partial=partial)
-        if serializer.is_valid():
-            serializer.save()
-            return Response(serializer.data)
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-    
-    def partial_update(self, request, *args, **kwargs):
-        """
-        Partially update a contact message (admin only)
-        """
-        kwargs['partial'] = True
-        return self.update(request, *args, **kwargs)
-    
-    def destroy(self, request, *args, **kwargs):
-        """
-        Delete a contact message (admin only)
-        """
-        instance = self.get_object()
-        instance.delete()
-        return Response({
-            'success': True,
-            'message': 'Contact message deleted successfully'
-        }, status=status.HTTP_204_NO_CONTENT)
-    
-    @action(detail=True, methods=['post'], permission_classes=[IsAdminUser])
-    def mark_read(self, request, pk=None):
-        """
-        Mark a contact message as read
-        
-        POST /api/contact/{id}/mark_read/
-        """
-        message = self.get_object()
-        message.read = True
-        message.save()
-        serializer = self.get_serializer(message)
-        return Response({
-            'success': True,
-            'message': 'Message marked as read',
-            'data': serializer.data
-        })
-    
-    @action(detail=True, methods=['post'], permission_classes=[IsAdminUser])
-    def mark_replied(self, request, pk=None):
-        """
-        Mark a contact message as replied
-        
-        POST /api/contact/{id}/mark_replied/
-        """
-        message = self.get_object()
-        message.replied = True
-        message.save()
-        serializer = self.get_serializer(message)
-        return Response({
-            'success': True,
-            'message': 'Message marked as replied',
-            'data': serializer.data
-        })
-    
-    @action(detail=False, methods=['get'], permission_classes=[IsAdminUser])
-    def unread(self, request):
-        """
-        Get all unread messages
-        
-        GET /api/contact/unread/
-        """
-        unread_messages = self.queryset.filter(read=False)
-        serializer = self.get_serializer(unread_messages, many=True)
-        return Response({
-            'count': unread_messages.count(),
-            'results': serializer.data
-        })
+        if self.action in ['list', 'retrieve']:
+            permission_classes = [AllowAny]
+        else:
+            permission_classes = [IsAdminUser]
+        return [permission() for permission in permission_classes]
 
 
-# ============================================================================
-# COMBINED HOME CONTENT VIEW
-# ============================================================================
+class ContactMessageViewSet(viewsets.ModelViewSet):
+    """
+    ViewSet for managing contact messages (admin only)
+    """
+    queryset = ContactMessage.objects.all()
+    serializer_class = ContactMessageSerializer
+    permission_classes = [IsAdminUser]
+    
+
+    def get_permissions(self):
+        """
+        Only admin users can access contact messages
+        """
+        permission_classes = [IsAdminUser]
+        return [permission() for permission in permission_classes]
+
+
+# -------------------------------------
+# Function Views
+# -------------------------------------
 
 @api_view(['GET'])
 @permission_classes([AllowAny])
 def get_home_content(request):
     """
-    Get all content for home page in a single request.
-    This endpoint combines data from multiple models to reduce API calls.
-    
-    GET /api/home-content/
-    
-    Returns:
-    {
-        "stats": {...},
-        "news": [...],
-        "events": [...],
-        "testimonials": [...],
-        "campus_life": [...]
-    }
+    Get content for the homepage (news, events, statistics, testimonials)
     """
-    # Get latest statistics
-    stats = Statistics.objects.first()
-    
-    # Get published content
-    news = News.objects.filter(published=True).order_by('-created_at')[:3]
-    events = Event.objects.filter(published=True).order_by('-event_date', '-created_at')[:3]
-    testimonials = Testimonial.objects.filter(approved=True).order_by('-created_at')[:3]
-    campus_life = CampusLife.objects.filter(published=True).order_by('-created_at')[:8]
-    
-    return Response({
-        'stats': StatisticSerializer(stats).data if stats else {
-            'active_students': 0,
-            'courses': 0,
-            'success_rate': 0,
-            'tutors': 0
-        },
-        'news': NewsSerializer(news, many=True).data,
-        'events': EventSerializer(events, many=True).data,
-        'testimonials': TestimonialSerializer(testimonials, many=True).data,
-        'campus_life': CampusLifeSerializer(campus_life, many=True).data,
-    })
+    try:
+        # Get latest statistics
+        latest_stats = Statistics.objects.first()
+        
+        # Get latest published news (limit to 3)
+        latest_news = News.objects.filter(published=True).order_by('-created_at')[:3]
+        
+        # Get upcoming events (limit to 3)
+        upcoming_events = Event.objects.filter(
+            published=True,
+            event_date__gte=timezone.now()
+        ).order_by('event_date')[:3]
+        
+        # Get approved testimonials (limit to 3)
+        testimonials = Testimonial.objects.filter(approved=True).order_by('-created_at')[:3]
+        
+        # Get campus life images (limit to 6)
+        campus_images = CampusLife.objects.filter(published=True).order_by('-created_at')[:6]
+        
+        # Serialize the data
+        stats_data = StatisticsSerializer(latest_stats).data if latest_stats else None
+        news_data = NewsSerializer(latest_news, many=True).data
+        events_data = EventSerializer(upcoming_events, many=True).data
+        testimonials_data = TestimonialSerializer(testimonials, many=True).data
+        campus_data = CampusLifeSerializer(campus_images, many=True).data
+        
+        return Response({
+            'statistics': stats_data,
+            'news': news_data,
+            'events': events_data,
+            'testimonials': testimonials_data,
+            'campus_life': campus_data
+        })
+        
+    except Exception as e:
+        return Response({
+            'error': 'Failed to fetch home content',
+            'details': str(e)
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
-# ============================================================================
-# UTILITY VIEWS
-# ============================================================================
 @api_view(['GET'])
-@permission_classes([IsAdminUser])
+@permission_classes([IsAuthenticated])
 def dashboard_stats(request):
     """
-    Get dashboard statistics for admin
-    
-    GET /api/dashboard-stats/
-    
-    Returns counts of various content types
+    Get dashboard statistics for the current user
     """
+    try:
+        user = request.user
+        stats = {}
+        
+        if user.role == 'student':
+            # Student stats
+            enrollments = Enrollment.objects.filter(student=user)
+            stats['total_courses'] = enrollments.count()
+            stats['active_courses'] = enrollments.filter(is_active=True).count()
+            stats['completed_courses'] = enrollments.filter(is_active=False).count()
+            
+            # Recent assignments
+            recent_assignments = Assignment.objects.filter(
+                course__enrollments__student=user
+            ).order_by('-due_date')[:5]
+            stats['recent_assignments'] = [
+                {
+                    'id': assignment.id,
+                    'title': assignment.title,
+                    'course': assignment.course.title,
+                    'due_date': assignment.due_date
+                }
+                for assignment in recent_assignments
+            ]
+            
+        elif user.role == 'tutor':
+            # Tutor stats
+            courses = Course.objects.filter(tutor=user)
+            stats['total_courses'] = courses.count()
+            stats['active_courses'] = courses.filter(is_active=True).count()
+            stats['total_students'] = Enrollment.objects.filter(course__in=courses).count()
+            
+            # Recent submissions
+            recent_submissions = AssignmentSubmission.objects.filter(
+                assignment__course__tutor=user
+            ).order_by('-submitted_at')[:5]
+            stats['recent_submissions'] = [
+                {
+                    'id': submission.id,
+                    'assignment': submission.assignment.title,
+                    'student': submission.student.username,
+                    'submitted_at': submission.submitted_at
+                }
+                for submission in recent_submissions
+            ]
+            
+        elif user.role == 'admin':
+            # Admin stats
+            from users.models import CustomUser
+            stats['total_users'] = CustomUser.objects.count()
+            stats['total_students'] = CustomUser.objects.filter(role='student').count()
+            stats['total_tutors'] = CustomUser.objects.filter(role='tutor').count()
+            stats['total_courses'] = Course.objects.count()
+            stats['total_assignments'] = Assignment.objects.count()
+            
+            # Recent messages
+            recent_messages = ContactMessage.objects.order_by('-created_at')[:5]
+            stats['recent_messages'] = [
+                {
+                    'id': message.id,
+                    'name': message.name,
+                    'subject': message.subject,
+                    'created_at': message.created_at,
+                    'read': message.read
+                }
+                for message in recent_messages
+            ]
+        
+        return Response(stats)
+        
+    except Exception as e:
+        return Response({
+            'error': 'Failed to fetch dashboard stats',
+            'details': str(e)
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+
+
+@api_view(['GET'])
+@permission_classes([AllowAny])
+def global_search(request):
+    """
+    Global search endpoint that searches across multiple models
+    """
+    query = request.GET.get('q', '').strip()
+    
+    if not query:
+        return Response({
+            'results': {
+                'courses': [],
+                'assignments': [],
+                'news': [],
+                'events': [],
+                'users': [],
+                'announcements': []
+            },
+            'total_results': 0
+        })
+    
+    # Search courses
+    courses = Course.objects.filter(
+        Q(title__icontains=query) |
+        Q(code__icontains=query) |
+        Q(description__icontains=query) |
+        Q(subject__icontains=query),
+        is_active=True
+    ).select_related('tutor')[:10]
+    
+    course_results = []
+    for course in courses:
+        course_results.append({
+            'id': course.id,
+            'title': course.title,
+            'type': 'course',
+            'subtitle': f"{course.code} - {course.subject or 'General'}",
+            'description': course.description[:100] + '...' if course.description else '',
+            'tutor': course.tutor.username if course.tutor else 'Unassigned',
+            'url': f'/courses/{course.id}',
+            'match_highlights': {
+                'title': query if query.lower() in course.title.lower() else None,
+                'code': query if query.lower() in course.code.lower() else None
+            }
+        })
+    
+    # Search assignments
+    assignments = Assignment.objects.filter(
+        Q(title__icontains=query) |
+        Q(description__icontains=query) |
+        Q(instructions__icontains=query)
+    ).select_related('course', 'tutor')[:10]
+    
+    assignment_results = []
+    for assignment in assignments:
+        assignment_results.append({
+            'id': assignment.id,
+            'title': assignment.title,
+            'type': 'assignment',
+            'subtitle': f"{assignment.course.code} - {assignment.course.title}",
+            'description': assignment.description[:100] + '...' if assignment.description else '',
+            'tutor': assignment.tutor.username,
+            'due_date': assignment.due_date,
+            'url': f'/assignments/{assignment.id}',
+            'match_highlights': {
+                'title': query if query.lower() in assignment.title.lower() else None,
+                'description': query if query.lower() in (assignment.description or '').lower() else None
+            }
+        })
+    
+    # Search news
+    news = News.objects.filter(
+        Q(title__icontains=query) |
+        Q(content__icontains=query),
+        published=True
+    ).select_related('author')[:10]
+    
+    news_results = []
+    for article in news:
+        news_results.append({
+            'id': article.id,
+            'title': article.title,
+            'type': 'news',
+            'subtitle': f"Published {article.created_at.strftime('%B %d, %Y')}",
+            'description': article.content[:150] + '...' if article.content else '',
+            'author': article.author.username if article.author else 'Staff',
+            'image_url': article.get_image,
+            'url': f'/news/{article.id}',
+            'match_highlights': {
+                'title': query if query.lower() in article.title.lower() else None,
+                'content': query if query.lower() in article.content[:200].lower() else None
+            }
+        })
+    
+    # Search events
+    events = Event.objects.filter(
+        Q(title__icontains=query) |
+        Q(content__icontains=query) |
+        Q(location__icontains=query),
+        published=True
+    )[:10]
+    
+    event_results = []
+    for event in events:
+        event_results.append({
+            'id': event.id,
+            'title': event.title,
+            'type': 'event',
+            'subtitle': f"{event.location or 'TBD'} - {event.event_date.strftime('%B %d, %Y') if event.event_date else 'Date TBD'}",
+            'description': event.content[:150] + '...' if event.content else '',
+            'event_date': event.event_date,
+            'location': event.location,
+            'url': f'/events/{event.id}',
+            'match_highlights': {
+                'title': query if query.lower() in event.title.lower() else None,
+                'location': query if query.lower() in (event.location or '').lower() else None
+            }
+        })
+    
+    # Search users (for admin/staff)
+    users = User.objects.filter(
+        Q(username__icontains=query) |
+        Q(first_name__icontains=query) |
+        Q(last_name__icontains=query) |
+        Q(email__icontains=query)
+    )[:10]
+    
+    user_results = []
+    for user in users:
+        user_results.append({
+            'id': user.id,
+            'title': f"{user.first_name} {user.last_name}".strip() or user.username,
+            'type': 'user',
+            'subtitle': f"{user.role.title()} - {user.email}",
+            'description': f"Username: {user.username}",
+            'role': user.role,
+            'email': user.email,
+            'url': f'/users/{user.id}',
+            'match_highlights': {
+                'name': query if query.lower() in user.username.lower() or query.lower() in f"{user.first_name} {user.last_name}".lower() else None,
+                'email': query if query.lower() in user.email.lower() else None
+            }
+        })
+    
+    # Search announcements
+    announcements = Announcement.objects.filter(
+        Q(title__icontains=query) |
+        Q(content__icontains=query),
+        published=True
+    ).select_related('admin')[:10]
+    
+    announcement_results = []
+    for announcement in announcements:
+        announcement_results.append({
+            'id': announcement.id,
+            'title': announcement.title,
+            'type': 'announcement',
+            'subtitle': f"{announcement.target_audience.title()} - {announcement.created_at.strftime('%B %d, %Y')}",
+            'description': announcement.content[:150] + '...' if announcement.content else '',
+            'admin': announcement.admin.username,
+            'priority': announcement.priority,
+            'url': f'/announcements/{announcement.id}',
+            'match_highlights': {
+                'title': query if query.lower() in announcement.title.lower() else None,
+                'content': query if query.lower() in announcement.content[:200].lower() else None
+            }
+        })
+    
+    # Compile results
+    results = {
+        'courses': course_results,
+        'assignments': assignment_results,
+        'news': news_results,
+        'events': event_results,
+        'users': user_results,
+        'announcements': announcement_results
+    }
+    
+    # Calculate total results
+    total_results = (
+        len(course_results) + 
+        len(assignment_results) + 
+        len(news_results) + 
+        len(event_results) + 
+        len(user_results) + 
+        len(announcement_results)
+    )
+    
     return Response({
-        'total_news': News.objects.count(),
-        'published_news': News.objects.filter(published=True).count(),
-        'total_events': Event.objects.count(),
-        'published_events': Event.objects.filter(published=True).count(),
-        'total_testimonials': Testimonial.objects.count(),
-        'approved_testimonials': Testimonial.objects.filter(approved=True).count(),
-        'pending_testimonials': Testimonial.objects.filter(approved=False).count(),
-        'total_campus_images': CampusLife.objects.count(),
-        'published_campus_images': CampusLife.objects.filter(published=True).count(),
-        'total_contact_messages': ContactMessage.objects.count(),
-        'unread_messages': ContactMessage.objects.filter(read=False).count(),
-        'unreplied_messages': ContactMessage.objects.filter(replied=False).count(),
+        'query': query,
+        'results': results,
+        'total_results': total_results,
+        'search_time': timezone.now().isoformat()
     })
+
+
+@api_view(['GET'])
+@permission_classes([AllowAny])
+def quick_search(request):
+    """
+    Quick search for suggestions/autocomplete
+    """
+    query = request.GET.get('q', '').strip()
+    
+    if len(query) < 2:
+        return Response({'suggestions': []})
+    
+    suggestions = []
+    
+    # Course suggestions
+    course_suggestions = Course.objects.filter(
+        Q(title__icontains=query) |
+        Q(code__icontains=query),
+        is_active=True
+    )[:5]
+    
+    for course in course_suggestions:
+        suggestions.append({
+            'text': f"{course.code} - {course.title}",
+            'type': 'course',
+            'id': course.id
+        })
+    
+    # Assignment suggestions
+    assignment_suggestions = Assignment.objects.filter(
+        title__icontains=query
+    )[:3]
+    
+    for assignment in assignment_suggestions:
+        suggestions.append({
+            'text': f"Assignment: {assignment.title}",
+            'type': 'assignment',
+            'id': assignment.id
+        })
+    
+    # News suggestions
+    news_suggestions = News.objects.filter(
+        title__icontains=query,
+        published=True
+    )[:3]
+    
+    for article in news_suggestions:
+        suggestions.append({
+            'text': f"News: {article.title}",
+            'type': 'news',
+            'id': article.id
+        })
+    
+    return Response({
+        'query': query,
+        'suggestions': suggestions[:10]
+    })
+
+
+class BookViewSet(viewsets.ModelViewSet):
+    """
+    ViewSet for managing digital bookshelf books
+    """
+    queryset = Book.objects.all()
+    serializer_class = BookSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        """
+        Return only available books for non-admin users
+        """
+        if self.request.user.is_staff or self.request.user.is_superuser:
+            return Book.objects.all()
+        return Book.objects.filter(is_available=True)
+
+    def get_permissions(self):
+        """
+        Set permissions based on action
+        """
+        if self.action in ['list', 'retrieve']:
+            permission_classes = [AllowAny]
+        else:
+            permission_classes = [IsAdminUser]
+        return [permission() for permission in permission_classes]
+
+    def perform_create(self, serializer):
+        """
+        Set the uploaded_by field when creating a book
+        """
+        serializer.save(uploaded_by=self.request.user)
+
+
+# ... existing views remain the same ...

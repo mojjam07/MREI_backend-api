@@ -1,6 +1,9 @@
+
 # models.py
 from django.db import models
 from django.conf import settings
+from django.utils import timezone
+from users.models import CustomUser
 
 class Statistics(models.Model):
     """Site-wide statistics"""
@@ -114,6 +117,7 @@ class CampusLife(models.Model):
         return self.image_url or '/api/placeholder/300/180'
 
 
+
 class ContactMessage(models.Model):
     """Contact form submissions"""
     name = models.CharField(max_length=255)
@@ -129,3 +133,134 @@ class ContactMessage(models.Model):
     
     def __str__(self):
         return f"{self.name} - {self.subject}"
+
+
+# -------------------------------------
+# Message System Models
+# -------------------------------------
+class Message(models.Model):
+    """Tutor-Student-Admin communication system"""
+    sender = models.ForeignKey(CustomUser, on_delete=models.CASCADE, related_name='sent_messages')
+    receiver = models.ForeignKey(CustomUser, on_delete=models.CASCADE, related_name='received_messages')
+    subject = models.CharField(max_length=255)
+    content = models.TextField()
+    sent_at = models.DateTimeField(auto_now_add=True)
+    is_read = models.BooleanField(default=False)
+    read_at = models.DateTimeField(null=True, blank=True)
+    message_type = models.CharField(max_length=20, choices=[
+        ('general', 'General'),
+        ('assignment', 'Assignment'),
+        ('grade', 'Grade'),
+        ('announcement', 'Announcement'),
+        ('support', 'Support')
+    ], default='general')
+    parent_message = models.ForeignKey('self', on_delete=models.CASCADE, null=True, blank=True, related_name='replies')
+    course = models.ForeignKey('academics.Course', on_delete=models.CASCADE, null=True, blank=True, related_name='messages')
+    assignment = models.ForeignKey('academics.Assignment', on_delete=models.CASCADE, null=True, blank=True, related_name='messages')
+    
+    class Meta:
+        ordering = ['-sent_at']
+    
+    def __str__(self):
+        return f"{self.sender.username} -> {self.receiver.username}: {self.subject}"
+
+
+class Notification(models.Model):
+    """System-wide notification system"""
+    user = models.ForeignKey(CustomUser, on_delete=models.CASCADE, related_name='notifications')
+    sender = models.ForeignKey(CustomUser, on_delete=models.CASCADE, related_name='sent_notifications', null=True, blank=True)
+    type = models.CharField(max_length=20, choices=[
+        ('announcement', 'Announcement'),
+        ('assignment', 'Assignment'),
+        ('grade', 'Grade'),
+        ('class_update', 'Class Update'),
+        ('deadline', 'Deadline'),
+        ('system', 'System')
+    ])
+    title = models.CharField(max_length=255)
+    content = models.TextField()
+    created_at = models.DateTimeField(auto_now_add=True)
+    is_read = models.BooleanField(default=False)
+    read_at = models.DateTimeField(null=True, blank=True)
+    priority = models.CharField(max_length=10, choices=[
+        ('low', 'Low'),
+        ('medium', 'Medium'),
+        ('high', 'High')
+    ], default='medium')
+    course = models.ForeignKey('academics.Course', on_delete=models.CASCADE, null=True, blank=True, related_name='notifications')
+    assignment = models.ForeignKey('academics.Assignment', on_delete=models.CASCADE, null=True, blank=True, related_name='notifications')
+    
+    class Meta:
+        ordering = ['-created_at']
+    
+    def __str__(self):
+        return f"{self.user.username}: {self.title}"
+
+
+class Announcement(models.Model):
+    """Platform-wide announcements (Admin only)"""
+    admin = models.ForeignKey(CustomUser, on_delete=models.CASCADE, limit_choices_to={"role": "admin"})
+    title = models.CharField(max_length=255)
+    content = models.TextField()
+    target_audience = models.CharField(max_length=20, choices=[
+        ('all', 'All Users'),
+        ('students', 'Students Only'),
+        ('tutors', 'Tutors Only'),
+        ('admins', 'Admins Only')
+    ], default='all')
+    created_at = models.DateTimeField(auto_now_add=True)
+    published = models.BooleanField(default=True)
+    expires_at = models.DateTimeField(null=True, blank=True)
+    priority = models.CharField(max_length=10, choices=[
+        ('low', 'Low'),
+        ('medium', 'Medium'),
+        ('high', 'High'),
+        ('urgent', 'Urgent')
+    ], default='medium')
+
+    class Meta:
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"{self.title} - {self.target_audience}"
+
+
+# -------------------------------------
+# Book Model for Digital Bookshelf
+# -------------------------------------
+class Book(models.Model):
+    """Digital bookshelf books"""
+    title = models.CharField(max_length=255)
+    author = models.CharField(max_length=255)
+    description = models.TextField(blank=True, null=True)
+    cover_image = models.ImageField(upload_to='books/covers/', blank=True, null=True)
+    pdf_file = models.FileField(upload_to='books/pdfs/', blank=True, null=True)
+    isbn = models.CharField(max_length=20, blank=True, null=True)
+    genre = models.CharField(max_length=100, blank=True, null=True)
+    publication_year = models.IntegerField(blank=True, null=True)
+    language = models.CharField(max_length=50, default='English')
+    pages = models.IntegerField(blank=True, null=True)
+    is_available = models.BooleanField(default=True)
+    uploaded_by = models.ForeignKey(CustomUser, on_delete=models.SET_NULL, null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"{self.title} by {self.author}"
+
+    @property
+    def get_cover_image(self):
+        """Return cover image URL or placeholder"""
+        if self.cover_image:
+            return self.cover_image.url
+        return '/api/placeholder/200/300'
+
+    @property
+    def get_pdf_file(self):
+        """Return PDF file URL"""
+        if self.pdf_file:
+            return self.pdf_file.url
+        return None

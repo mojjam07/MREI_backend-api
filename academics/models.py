@@ -58,6 +58,7 @@ class Assignment(models.Model):
     due_date = models.DateTimeField()
     max_points = models.DecimalField(max_digits=6, decimal_places=2)
     created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
     assignment_type = models.CharField(max_length=20, choices=[
         ('essay', 'Essay'),
         ('quiz', 'Quiz'),
@@ -97,6 +98,14 @@ class AssignmentSubmission(models.Model):
 
     def __str__(self):
         return f"{self.assignment.title} -> {self.student.username}"
+
+    @property
+    def is_graded(self):
+        return self.grade is not None
+
+    @property
+    def is_late(self):
+        return self.status == 'late'
 
 
 # -------------------------------------

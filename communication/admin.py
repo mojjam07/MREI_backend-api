@@ -1,6 +1,6 @@
 # admin.py
 from django.contrib import admin
-from .models import Statistics, News, Event, Testimonial, CampusLife, ContactMessage
+from .models import Statistics, News, Event, Testimonial, CampusLife, ContactMessage, Book
 
 
 @admin.register(Statistics)
@@ -171,3 +171,39 @@ class ContactMessageAdmin(admin.ModelAdmin):
         updated = queryset.update(replied=True)
         self.message_user(request, f'{updated} message(s) marked as replied.')
     mark_as_replied.short_description = 'Mark as replied'
+
+
+# -------------------------------------
+# Book Admin
+# -------------------------------------
+@admin.register(Book)
+class BookAdmin(admin.ModelAdmin):
+    list_display = ['title', 'author', 'genre', 'publication_year', 'language', 'is_available', 'uploaded_by', 'created_at']
+    list_filter = ['genre', 'language', 'is_available', 'publication_year', 'created_at']
+    search_fields = ['title', 'author', 'isbn', 'genre', 'description']
+    readonly_fields = ['created_at', 'updated_at']
+    date_hierarchy = 'created_at'
+    
+    fieldsets = (
+        ('Book Information', {
+            'fields': ('title', 'author', 'description', 'genre')
+        }),
+        ('Publication Details', {
+            'fields': ('isbn', 'publication_year', 'language', 'pages')
+        }),
+        ('Files', {
+            'fields': ('cover_image', 'pdf_file')
+        }),
+        ('Availability', {
+            'fields': ('is_available',)
+        }),
+        ('Metadata', {
+            'fields': ('uploaded_by', 'created_at', 'updated_at'),
+            'classes': ('collapse',)
+        }),
+    )
+    
+    def save_model(self, request, obj, form, change):
+        if not obj.pk:
+            obj.uploaded_by = request.user
+        super().save_model(request, obj, form, change)

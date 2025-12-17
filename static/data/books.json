@@ -1,0 +1,50 @@
+[
+  {
+    "id": 1,
+    "title": "Introduction to Computer Science",
+    "author": "John Doe",
+    "description": "A comprehensive guide to the fundamentals of computer science, covering algorithms, data structures, and programming paradigms.",
+    "cover": "/images/book1.jpg",
+    "pdf": "/pdfs/book1.pdf"
+  },
+  {
+    "id": 2,
+    "title": "Advanced Mathematics for Engineers",
+    "author": "Jane Smith",
+    "description": "An in-depth exploration of mathematical concepts essential for engineering applications, including calculus and linear algebra.",
+    "cover": "/images/book2.jpg",
+    "pdf": "/pdfs/book2.pdf"
+  },
+  {
+    "id": 3,
+    "title": "Business Ethics and Corporate Responsibility",
+    "author": "Michael Johnson",
+    "description": "Examining the principles of ethical business practices and the importance of corporate social responsibility in modern enterprises.",
+    "cover": "/images/book3.jpg",
+    "pdf": "/pdfs/book3.pdf"
+  },
+  {
+    "id": 4,
+    "title": "Environmental Science: A Global Perspective",
+    "author": "Sarah Williams",
+    "description": "Understanding environmental issues from a global viewpoint, including climate change, biodiversity, and sustainable development.",
+    "cover": "/images/book4.jpg",
+    "pdf": "/pdfs/book4.pdf"
+  },
+  {
+    "id": 5,
+    "title": "Psychology: The Human Mind",
+    "author": "David Brown",
+    "description": "An exploration of human psychology, covering cognitive processes, behavior, and mental health.",
+    "cover": "/images/book5.jpg",
+    "pdf": "/pdfs/book5.pdf"
+  },
+  {
+    "id": 6,
+    "title": "History of Modern Art",
+    "author": "Emily Davis",
+    "description": "A journey through the evolution of modern art movements, from impressionism to contemporary art.",
+    "cover": "/images/book6.jpg",
+    "pdf": "/pdfs/book6.pdf"
+  }
+]

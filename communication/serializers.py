@@ -54,10 +54,11 @@ class EventSerializer(serializers.ModelSerializer):
 # CampusLife
 # --------------------------------------
 
+
 class CampusLifeSerializer(serializers.ModelSerializer):
     class Meta:
         model = CampusLife
-        field = '__all__'
+        fields = '__all__'
 
 # --------------------------------------
 # Message
